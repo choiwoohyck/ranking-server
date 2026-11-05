@@ -1,0 +1,30 @@
+POST http://localhost:8080/scores
+Content-Type: application/json
+
+{
+  "userId": "otter1",
+  "score": 12500
+}
+###
+POST http://localhost:8080/scores
+Content-Type: application/json
+
+{ "userId": "otter2", "score": 30000 }
+
+###
+POST http://localhost:8080/scores
+Content-Type: application/json
+
+{ "userId": "otter1", "score": 5000 }
+
+###
+GET http://localhost:8080/rankings?limit=10
+
+###
+POST http://localhost:8080/scores
+Content-Type: application/json
+
+{ "userId": "", "score": -999 }
+
+###
+GET http://localhost:8080/rankings?limit=-5
