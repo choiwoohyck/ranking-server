@@ -2,12 +2,13 @@ package com.ranking.ranking_server.service;
 
 import com.ranking.ranking_server.domain.Score;
 import com.ranking.ranking_server.repository.ScoreRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
-
+@Transactional
 public class ScoreService {
     private final ScoreRepository scoreRepository;
 
