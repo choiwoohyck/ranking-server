@@ -9,11 +9,11 @@ import jakarta.persistence.Table;
 public class User {
     @Id
     private String userId;
-    private String password;
+    private String passwordHash;
 
-    public User(String userId, String password) {
+    public User(String userId, String passwordHash) {
         this.userId = userId;
-        this.password = password;
+        this.passwordHash = passwordHash;
     }
 
     protected User() {
@@ -24,7 +24,7 @@ public class User {
         return userId;
     }
 
-    public String getPassword() {
-        return password;
+    public String getPasswordHash() {
+        return passwordHash;
     }
 }

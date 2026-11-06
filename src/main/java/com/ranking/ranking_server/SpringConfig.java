@@ -6,6 +6,7 @@ import com.ranking.ranking_server.service.AuthService;
 import com.ranking.ranking_server.service.ScoreService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @Configuration
 public class SpringConfig {
@@ -20,7 +21,12 @@ public class SpringConfig {
 
     @Bean
     public AuthService authService() {
-        return new AuthService(userRepository);
+        return new AuthService(userRepository, bCryptPasswordEncoder());
+    }
+
+    @Bean
+    public BCryptPasswordEncoder bCryptPasswordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     public SpringConfig(ScoreRepository scoreRepository, UserRepository userRepository) {
