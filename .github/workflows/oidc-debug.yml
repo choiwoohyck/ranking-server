@@ -1,0 +1,13 @@
+# 임시: GitHub OIDC 토큰의 내용(claims)만 출력해 AWS 신뢰 관계와 비교하기 위한 워크플로우. 확인 후 삭제.
+name: OIDC debug
+on: workflow_dispatch
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{iss, aud, sub, repository, ref}' || true
