@@ -1,7 +1,6 @@
 package com.ranking.ranking_server.security;
 
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
+import com.ranking.ranking_server.exception.AuthenticationException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +31,7 @@ public class JwtTokenProviderTest {
         String forged = otherServer.createToken("otter1");
 
         assertThatThrownBy(() -> jwtTokenProvider.getUserId(forged))
-                .isInstanceOf(JwtException.class);
+                .isInstanceOf(AuthenticationException.class);
     }
 
     @Test
@@ -41,7 +40,8 @@ public class JwtTokenProviderTest {
         String expired = expiredProvider.createToken("otter1");
 
         assertThatThrownBy(() -> jwtTokenProvider.getUserId(expired))
-                .isInstanceOf(ExpiredJwtException.class);
+                .isInstanceOf(AuthenticationException.class)
+                .hasMessageContaining("만료");
     }
 
     @Test
@@ -53,6 +53,6 @@ public class JwtTokenProviderTest {
         String tampered = parts[0] + "." + otherPayload + "." + parts[2];
 
         assertThatThrownBy(() -> jwtTokenProvider.getUserId(tampered))
-                .isInstanceOf(JwtException.class);
+                .isInstanceOf(AuthenticationException.class);
     }
 }

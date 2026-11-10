@@ -1,5 +1,7 @@
 package com.ranking.ranking_server.service;
 
+import com.ranking.ranking_server.exception.AuthenticationException;
+import com.ranking.ranking_server.exception.DuplicateUserException;
 import com.ranking.ranking_server.repository.MemoryUserRepository;
 import com.ranking.ranking_server.security.JwtTokenProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -43,7 +45,7 @@ class AuthServiceTest {
         authService.signUp("otter1", "password123");
 
         assertThatThrownBy(() -> authService.signUp("otter1", "another123"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(DuplicateUserException.class);
     }
 
     @Test
@@ -69,13 +71,13 @@ class AuthServiceTest {
         authService.signUp("otter1", "password123");
 
         assertThatThrownBy(() -> authService.login("otter1", "wrong-password"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(AuthenticationException.class);
     }
 
     @Test
     void 없는_아이디면_로그인_예외() {
         assertThatThrownBy(() -> authService.login("nobody", "password123"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(AuthenticationException.class);
     }
 
     @Test
