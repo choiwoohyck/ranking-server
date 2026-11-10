@@ -1,6 +1,8 @@
 package com.ranking.ranking_server.service;
 
 import com.ranking.ranking_server.domain.User;
+import com.ranking.ranking_server.exception.AuthenticationException;
+import com.ranking.ranking_server.exception.DuplicateUserException;
 import com.ranking.ranking_server.repository.UserRepository;
 import com.ranking.ranking_server.security.JwtTokenProvider;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +24,7 @@ public class AuthService {
 
     public void signUp(String userId, String password) {
         if (userRepository.findById(userId).isPresent()) {
-            throw new IllegalStateException("중복된 아이디 입니다.");
+            throw new DuplicateUserException("이미 중복된 아이디 입니다.");
         }
         String hashResult = bCryptPasswordEncoder.encode(password);
         User newUser = new User(userId, hashResult);
@@ -32,10 +34,10 @@ public class AuthService {
     public String login(String userId, String password) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException(LOGIN_FAILED));
+                .orElseThrow(() -> new AuthenticationException(LOGIN_FAILED));
 
         if (!bCryptPasswordEncoder.matches(password, user.getPasswordHash())) {
-            throw new IllegalStateException(LOGIN_FAILED);
+            throw new AuthenticationException(LOGIN_FAILED);
         }
 
         return jwtTokenProvider.createToken(userId);

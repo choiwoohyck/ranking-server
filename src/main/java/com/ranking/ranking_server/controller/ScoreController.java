@@ -3,6 +3,7 @@ package com.ranking.ranking_server.controller;
 import com.ranking.ranking_server.domain.Score;
 import com.ranking.ranking_server.dto.RankingResponse;
 import com.ranking.ranking_server.dto.ScoreSubmitRequest;
+import com.ranking.ranking_server.exception.AuthenticationException;
 import com.ranking.ranking_server.security.JwtTokenProvider;
 import com.ranking.ranking_server.service.ScoreService;
 import jakarta.validation.Valid;
@@ -35,7 +36,7 @@ public class ScoreController {
     // "Bearer eyJ..." → "eyJ..."
     private String extractToken(String authorization) {
         if (!authorization.startsWith(BEARER_PREFIX)) {
-            throw new IllegalArgumentException("Authorization 헤더는 'Bearer 토큰' 형식이어야 합니다.");
+            throw new AuthenticationException("Authorization 헤더는 'Bearer 토큰' 형식이어야 합니다.");
         }
         return authorization.substring(BEARER_PREFIX.length());
     }

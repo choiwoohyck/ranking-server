@@ -46,4 +46,5 @@
 4. ~~사용자 식별: 요청에 `userId`를 직접 담으므로 남의 아이디로 제출 가능.~~ → **해결(11/10)**: `POST /scores`는
    `Authorization: Bearer <JWT>`의 `userId`만 사용하고, 요청 body에서는 `userId`를 받지 않음.
    body에 다른 `userId`를 넣어도 무시되고 토큰 주인의 기록으로 저장되는 것을 확인함.
-5. 인증 실패 응답: 토큰이 형식에 안 맞거나 위조·만료된 경우 지금은 500. 예외 처리 단계에서 401로 변경 예정.
+5. ~~인증 실패 응답이 500.~~ → **해결(11/10)**: `GlobalExceptionHandler`에서 409/401/400 + `ErrorResponse(code, message)`로 통일.
+   jjwt 예외는 `JwtTokenProvider` 안에서 `AuthenticationException`으로 바꿔 던짐(외부 라이브러리 의존을 한 파일에 가둠).

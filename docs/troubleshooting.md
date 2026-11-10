@@ -65,3 +65,43 @@
 - 해결: `@Id`를 `userId` 위로 옮기고 `@GeneratedValue` 제거.
 - 결과: JPA가 만든 테이블에서 `PRIMARY KEY (user_id)` 확인. 같은 유저가 더 높은 점수를 보내면
   새 행이 생기지 않고 기존 행이 갱신됨(100 → 300). 유저당 기록 1개가 **DB 레벨에서도 보장**됨.
+
+
+## 5. 사용자 실수인 요청이 모두 500 Internal Server Error로 응답됨
+- 문제: 회원가입·로그인·토큰 검증을 붙인 뒤 `http/auth.http`, `http/scores.http`로 확인하니
+  사용자가 잘못 보낸 요청이 전부 500으로 응답됨.
+  ```
+  POST /auth/signup (이미 있는 아이디)   → 500 {"status":500,"error":"Internal Server Error",...}
+  POST /auth/login  (비밀번호 틀림)      → 500
+  POST /scores      (가짜 토큰)          → 500
+  ```
+  500은 "서버가 예상 못 한 문제"라는 뜻이라, 클라이언트(게임)는 **자기가 뭘 잘못했는지 알 수 없고**,
+  서버 쪽에서도 진짜 장애와 사용자 실수를 구분할 수 없음.
+- 원인:
+    1. 서비스가 던진 예외(`IllegalStateException`)를 컨트롤러도 잡지 않아 스프링까지 올라감
+       → 스프링은 처리되지 않은 예외를 500으로 응답함.
+    2. 중복 가입과 로그인 실패가 같은 `IllegalStateException`이라 **종류를 구분할 방법이 없었음**.
+    3. 가짜 토큰은 우리 코드가 아니라 jjwt 라이브러리의 `JwtException`이 발생함.
+- 해결:
+    1. 상황별 예외 클래스 생성: `DuplicateUserException`(→ 409), `AuthenticationException`(→ 401).
+       `throws`를 모든 메서드에 붙이지 않도록 `RuntimeException`을 상속함
+       (스프링 `@Transactional`도 `RuntimeException`일 때 롤백하는 것이 기본).
+    2. `@RestControllerAdvice` + `@ExceptionHandler`로 예외를 한 곳(`GlobalExceptionHandler`)에서 받아
+       상태 코드와 `ErrorResponse(code, message)` JSON으로 변환. 게임 클라이언트는 문구가 아니라 `code`로 분기.
+    3. jjwt 예외는 `JwtTokenProvider.getUserId` 안에서 잡아 `AuthenticationException`으로 바꿔 던짐.
+       핸들러에 `JwtException`을 직접 등록하는 방법도 있지만, 그러면 핸들러가 jjwt에 의존하게 됨.
+       **외부 라이브러리를 아는 곳을 한 파일로 제한**하기 위해 이 방법을 선택.
+    4. 검증 실패(`MethodArgumentNotValidException`, `HandlerMethodValidationException`)와
+       `Authorization` 헤더 누락(`MissingRequestHeaderException`)도 같은 형식으로 통일.
+       헤더 누락은 "인증 정보 없음"이므로 400이 아닌 401로 응답.
+    5. 기존 테스트 3개가 `IllegalStateException`을 기대해 실패 → 새 예외 타입으로 수정.
+- 결과:
+
+  | 요청 | 전 | 후 |
+  |---|---|---|
+  | 중복 가입 | 500 | 409 `DUPLICATE_USER` |
+  | 비밀번호 틀림 / 없는 아이디 | 500 | 401 `UNAUTHORIZED` (같은 메시지) |
+  | 가짜 토큰 / `Bearer` 형식 오류 / 헤더 없음 | 500·400 | 401 `UNAUTHORIZED` |
+  | 비밀번호 8자 미만, 음수 점수, `limit=0` | 400 (기본 형식) | 400 `INVALID_REQUEST` + 필드별 이유 |
+
+  예: `{"code":"INVALID_REQUEST","message":"password: 크기가 8에서 72 사이여야 합니다, userId: 공백일 수 없습니다"}`
