@@ -3,6 +3,7 @@
 services:
   mysql:                                   # 서비스 이름 = Compose 네트워크 안에서의 주소
     image: mysql:8.4
+    restart: unless-stopped                # EC2 재부팅·비정상 종료 시 자동 재시작 (직접 stop한 경우는 제외)
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}  # .env의 값이 들어감
       MYSQL_DATABASE: ranking              # 처음 뜰 때 ranking DB 생성
@@ -17,6 +18,7 @@ services:
 
   app:
     build: .                               # 이 폴더의 Dockerfile로 이미지를 만들어 실행
+    restart: unless-stopped
     ports:
       - "8080:8080"                        # 내 PC 8080 → 컨테이너 8080
     environment:
