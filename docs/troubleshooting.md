@@ -105,3 +105,26 @@
   | 비밀번호 8자 미만, 음수 점수, `limit=0` | 400 (기본 형식) | 400 `INVALID_REQUEST` + 필드별 이유 |
 
   예: `{"code":"INVALID_REQUEST","message":"password: 크기가 8에서 72 사이여야 합니다, userId: 공백일 수 없습니다"}`
+
+
+## 6. Swagger UI에서만 토큰을 넣어도 401 (`Authorization 헤더가 필요합니다`)
+- 문제: springdoc으로 Swagger UI를 붙인 뒤, 로그인으로 받은 토큰을 `POST /scores`의 `Authorization` 입력 칸에
+  `Bearer <토큰>` 형식으로 넣고 실행했지만 401이 나옴.
+  ```json
+  { "code": "UNAUTHORIZED", "message": "Authorization 헤더가 필요합니다." }
+  ```
+  같은 토큰으로 `http/scores.http`나 `curl`로 보내면 200으로 정상 저장됨 → **서버가 아니라 Swagger UI 쪽 문제**.
+  메시지가 "형식 오류"나 "유효하지 않은 토큰"이 아니라 "헤더가 필요합니다"이므로, 헤더 자체가 요청에 없었음.
+- 원인: OpenAPI 표준에는 **이름이 `Accept`, `Content-Type`, `Authorization`인 헤더 파라미터 정의는 무시한다**는
+  규칙이 있음. springdoc은 `@RequestHeader("Authorization")`을 보고 입력 칸을 만들었지만, Swagger UI는 표준대로
+  그 값을 요청에 싣지 않음. 인증 헤더는 일반 파라미터가 아니라 **보안 스킴(security scheme)**으로 정의해야 함.
+- 해결:
+    1. `OpenApiConfig`에 `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` 등록
+       → 화면 오른쪽 위에 🔒 Authorize 버튼이 생기고, 여기 넣은 토큰을 `Authorization: Bearer <토큰>`으로 붙여 보냄.
+    2. `POST /scores`에 `@SecurityRequirement(name = "bearerAuth")`를 붙여 이 API에 보안 스킴을 적용.
+    3. 어차피 전송되지 않는 `Authorization` 입력 칸은 `@Parameter(hidden = true)`로 숨김.
+       서버 코드는 바뀌지 않음(그대로 `@RequestHeader`로 읽음).
+- 결과: Swagger 문서에서 `POST /scores`에만 `security: bearerAuth`가 적용되고 `Authorization` 파라미터가 사라짐.
+  🔒 Authorize에 토큰을 넣은 뒤 점수 제출 → 200.
+  같은 요청이 **도구마다 다르게 동작할 수 있다**는 것과, 이럴 때는 서버 로그·응답 메시지로 "요청에 무엇이 실제로
+  도착했는지"부터 확인해야 한다는 것을 배움.
