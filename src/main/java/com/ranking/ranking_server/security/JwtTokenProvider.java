@@ -28,4 +28,13 @@ public class JwtTokenProvider {
                 .signWith(key)
                 .compact();
     }
+
+    public String getUserId(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+    }
 }
