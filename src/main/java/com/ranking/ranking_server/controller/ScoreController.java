@@ -3,6 +3,7 @@ package com.ranking.ranking_server.controller;
 import com.ranking.ranking_server.domain.Score;
 import com.ranking.ranking_server.dto.RankingResponse;
 import com.ranking.ranking_server.dto.ScoreSubmitRequest;
+import com.ranking.ranking_server.security.JwtTokenProvider;
 import com.ranking.ranking_server.service.ScoreService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -14,15 +15,29 @@ import java.util.List;
 
 @RestController
 public class ScoreController {
-    private final ScoreService scoreService;
+    private static final String BEARER_PREFIX = "Bearer ";
 
-    public ScoreController(ScoreService scoreService) {
+    private final ScoreService scoreService;
+    private final JwtTokenProvider jwtTokenProvider;
+
+    public ScoreController(ScoreService scoreService, JwtTokenProvider jwtTokenProvider) {
         this.scoreService = scoreService;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @PostMapping("/scores")
-    public void submit(@Valid @RequestBody ScoreSubmitRequest request) {
-        scoreService.submit(request.userId(), request.score());
+    public void submit(@RequestHeader("Authorization") String authorization,
+                       @Valid @RequestBody ScoreSubmitRequest request) {
+        String userId = jwtTokenProvider.getUserId(extractToken(authorization));
+        scoreService.submit(userId, request.score());
+    }
+
+    // "Bearer eyJ..." → "eyJ..."
+    private String extractToken(String authorization) {
+        if (!authorization.startsWith(BEARER_PREFIX)) {
+            throw new IllegalArgumentException("Authorization 헤더는 'Bearer 토큰' 형식이어야 합니다.");
+        }
+        return authorization.substring(BEARER_PREFIX.length());
     }
 
     @GetMapping("/rankings")

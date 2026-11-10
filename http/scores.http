@@ -1,30 +1,57 @@
-POST http://localhost:8080/scores
+### 0. 가입 (이미 있으면 500이 나도 괜찮음)
+POST http://localhost:8080/auth/signup
 Content-Type: application/json
 
-{
-  "userId": "otter1",
-  "score": 12500
-}
-###
-POST http://localhost:8080/scores
+{ "userId": "otter1", "password": "password123" }
+
+### 1. 로그인 → 응답의 token을 자동으로 저장
+POST http://localhost:8080/auth/login
 Content-Type: application/json
 
-{ "userId": "otter2", "score": 30000 }
+{ "userId": "otter1", "password": "password123" }
 
-###
+> {% client.global.set("token", response.body.token); %}
+
+### 2. 점수 제출 (토큰의 userId = otter1 로 저장됨)
 POST http://localhost:8080/scores
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
-{ "userId": "otter1", "score": 5000 }
+{ "score": 12500 }
 
-###
+### 3. 더 낮은 점수 → 갱신 안 됨
+POST http://localhost:8080/scores
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{ "score": 5000 }
+
+### 4. 랭킹 조회 (토큰 필요 없음)
 GET http://localhost:8080/rankings?limit=10
 
-###
+### 5. 토큰 없이 제출 → 거부
 POST http://localhost:8080/scores
 Content-Type: application/json
 
-{ "userId": "", "score": -999 }
+{ "score": 99999 }
 
-###
-GET http://localhost:8080/rankings?limit=-5
+### 6. 가짜 토큰 → 거부
+POST http://localhost:8080/scores
+Content-Type: application/json
+Authorization: Bearer fake.token.value
+
+{ "score": 99999 }
+
+### 7. body에 userId를 넣어도 무시됨 (토큰 주인인 otter1로 저장)
+POST http://localhost:8080/scores
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{ "userId": "otter2", "score": 20000 }
+
+### 8. 음수 점수 → 400
+POST http://localhost:8080/scores
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{ "score": -999 }
