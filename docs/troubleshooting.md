@@ -154,3 +154,29 @@
   같은 커밋에서 Node 20 지원 종료 경고가 나던 actions(`checkout`, `setup-java`, `configure-aws-credentials`)도 v5로 올림.
 - 결과: 테스트 22개가 GitHub 러너에서 MySQL 서비스 컨테이너와 함께 통과(1분 16초).
   Windows에서 만든 저장소를 리눅스에서 실행할 때 **줄바꿈(CRLF/LF)뿐 아니라 실행 권한도 확인해야 한다**는 것을 배움.
+
+
+## 8. 자동 배포가 `Not authorized to perform sts:AssumeRoleWithWebIdentity`로 실패
+- 문제: CI/CD를 `main`에 합치자 테스트는 통과했지만, 배포 작업의 첫 단계(AWS 역할 위임)에서 12번 재시도 후 실패.
+  ```
+  ##[error]Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+  ```
+  AWS 에러 메시지는 "권한 없음"만 알려 주고 **무엇이 안 맞는지는 알려 주지 않음**.
+- 원인 (두 겹):
+    1. **역할 이름 불일치**: 콘솔에서 역할을 만들 때 정책 이름(`allow-ssh-rule-on-ranking-sg`)을 역할 이름 칸에 입력함.
+       GitHub Secret `AWS_DEPLOY_ROLE_ARN`은 존재하지 않는 `.../role/github-actions-deploy`를 가리키고 있었음.
+    2. Secret을 실제 ARN으로 고친 뒤에도 같은 에러 → **`sub` 형식 불일치**. 추측 대신, `workflow_dispatch`로
+       임시 워크플로우를 만들어 GitHub이 실제로 보내는 OIDC 토큰의 내용(서명 부분 제외, claims만)을 출력함.
+       ```
+       신뢰 정책의 sub : repo:choiwoohyck/ranking-server:ref:refs/heads/main
+       실제 토큰의 sub : repo:choiwoohyck@26760230/ranking-server@1443807861:ref:refs/heads/main
+       ```
+       GitHub이 `sub`에 계정·저장소의 **고유 ID**를 붙여 보내고 있었음(저장소 이름을 바꾸거나 같은 이름으로
+       다시 만들어도 다른 저장소로 구분되도록 하는 형식). 대부분의 문서·예시는 ID가 없는 형식이라 그대로 따라 하면 맞지 않음.
+- 해결:
+    1. Secret `AWS_DEPLOY_ROLE_ARN`을 실제 역할 ARN으로 변경 (IAM 역할은 이름을 바꿀 수 없음).
+    2. 역할의 신뢰 정책 `sub` 조건을 실제 토큰 값으로 변경 (`infra/deploy-role-trust.json`도 같이 수정).
+    3. 확인용 임시 워크플로우는 삭제.
+- 결과: `test` → `deploy` 전체 성공. 배포 로그에서 보안 그룹 규칙 `sgr-0f7353d6d4a98e940`이
+  배포 직전에 추가되고 배포 후 같은 ID로 삭제되는 것을 확인. EC2가 새 커밋(`3eb66b3`)으로 갱신되고 `/ping` 응답 정상.
+  에러 메시지가 원인을 알려 주지 않을 때는 **양쪽이 실제로 주고받는 값을 직접 찍어서 비교**하는 것이 가장 빠르다는 것을 배움.
