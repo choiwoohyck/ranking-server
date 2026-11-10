@@ -39,6 +39,31 @@
 - 이유: setter가 있으면 어디서든 `setScore(0)`처럼 점수를 낮출 수 있음. 규칙을 객체 안에 두면 "점수는 낮아질 수 없다"를 `Score`가 스스로 지킴 (캡슐화).
 - 구현 영향: setter가 없으므로 `Score`는 생성자로 만듦.
 
+## 6. 배포 구조와 CI/CD
+
+```
+개발자 push ─▶ GitHub Actions
+               ├─ test: MySQL 서비스 컨테이너 + ./gradlew test   (모든 브랜치·PR)
+               └─ deploy: main 브랜치 + test 통과 시에만
+                    1. OIDC로 IAM 역할 임시 획득 (GitHub에 AWS 키를 저장하지 않음)
+                    2. 보안 그룹에 "러너 IP → 22번" 규칙 추가
+                    3. SSH → git pull → docker compose up --build -d → /ping 헬스 체크
+                    4. 규칙 삭제 (실패해도 always()로 반드시 삭제)
+
+EC2 (t3.micro, Ubuntu 24.04, ap-southeast-2)
+  └─ Docker Compose: app(Spring Boot) + mysql(볼륨 mysql-data), restart: unless-stopped
+```
+
+- **리전**: AWS 무료 플랜 프로젝트가 시드니(ap-southeast-2)에 고정되어 있어 서울 대신 시드니에 배포.
+  한국에서 왕복 지연이 약 0.1초 늘어나지만 포트폴리오 데모에는 영향 없음.
+- **22번 포트를 평소에 닫아 두는 이유**: GitHub 러너 IP는 매번 바뀌어 고정 IP로 허용할 수 없음.
+  22번을 전체(0.0.0.0/0)에 여는 방법은 간단하지만 상시 공격 대상이 되므로, 배포하는 동안만 러너 IP 하나를 연다.
+- **권한 최소화**: 배포 역할은 이 저장소의 `main` 브랜치에서만 맡을 수 있고(`sub` 조건), 할 수 있는 일은
+  이 보안 그룹 하나에 인바운드 규칙을 추가·삭제하는 것뿐 (`infra/deploy-role-*.json`).
+- **배포 전용 SSH 키**: 개발자 접속용 `.pem`과 분리. 유출 시 EC2의 `authorized_keys`에서 이 키만 지우면 됨.
+- **메모리 1GB 대응**: 이미지 빌드(Gradle) 중 메모리가 부족해 스왑 2GB 추가.
+  개선 방향: GitHub Actions에서 이미지를 빌드해 레지스트리(GHCR)에 올리고 EC2는 pull만 하도록 변경.
+
 ## 알고 있는 한계
 1. 게임 쪽 미구현: 해달왕국은 현재 누적 획득 골드를 세지 않음. 연동하려면 골드 획득 시 누적값을 더하는 기능이 필요함 (팀 합의 필요).
 2. 클라이언트 신뢰 문제: 점수를 클라이언트가 계산해서 보내므로 조작된 값을 막을 수 없음. MVP 범위 밖. 대응 후보: 제출 이력 기반 이상 증가 탐지 (결정 1-B).
@@ -48,3 +73,5 @@
    body에 다른 `userId`를 넣어도 무시되고 토큰 주인의 기록으로 저장되는 것을 확인함.
 5. ~~인증 실패 응답이 500.~~ → **해결(11/10)**: `GlobalExceptionHandler`에서 409/401/400 + `ErrorResponse(code, message)`로 통일.
    jjwt 예외는 `JwtTokenProvider` 안에서 `AuthenticationException`으로 바꿔 던짐(외부 라이브러리 의존을 한 파일에 가둠).
+6. 퍼블릭 IP가 고정이 아님: 인스턴스를 중지 후 시작하면 IP가 바뀜(재부팅은 유지). 탄력적 IP나 도메인을 연결하면 해결.
+7. 배포 중 짧은 중단: 같은 서버에서 컨테이너를 교체하므로 재시작 동안(수십 초) 요청이 실패할 수 있음. 무중단 배포는 범위 밖.

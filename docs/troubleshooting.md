@@ -128,3 +128,29 @@
   🔒 Authorize에 토큰을 넣은 뒤 점수 제출 → 200.
   같은 요청이 **도구마다 다르게 동작할 수 있다**는 것과, 이럴 때는 서버 로그·응답 메시지로 "요청에 무엇이 실제로
   도착했는지"부터 확인해야 한다는 것을 배움.
+
+
+## 7. GitHub Actions에서 `./gradlew: Permission denied`
+- 문제: CI 워크플로우를 처음 올렸더니 테스트 단계가 바로 실패함.
+  ```
+  ./gradlew: Permission denied
+  ##[error]Process completed with exit code 126.
+  ```
+  내 PC(Windows)와 Docker 이미지 빌드에서는 문제없이 실행되던 파일이었음.
+- 원인: 리눅스는 파일마다 **실행 권한**이 있어야 실행할 수 있고, Git은 이 권한을 파일 모드로 함께 저장함
+  (`100755` = 실행 가능, `100644` = 일반 파일). 프로젝트를 Windows에서 만들고 커밋해서 `gradlew`가 `100644`로
+  저장되어 있었고, GitHub 러너(리눅스)는 저장소의 권한을 그대로 따름.
+  ```
+  $ git ls-files -s gradlew
+  100644 249efbb... 0	gradlew
+  ```
+  Dockerfile에서는 `RUN chmod +x gradlew`로 직접 권한을 줬기 때문에 그동안 드러나지 않았음.
+- 해결: Git에 저장된 권한 자체를 바꿈.
+  ```
+  git update-index --chmod=+x gradlew   # 100644 → 100755
+  ```
+  워크플로우에 `chmod +x`를 추가하는 방법도 있지만, 그러면 저장소를 받는 모든 곳(다른 CI, 다른 개발자)이 같은
+  처리를 해야 함 → 원인(저장소의 권한)을 고치는 쪽을 선택.
+  같은 커밋에서 Node 20 지원 종료 경고가 나던 actions(`checkout`, `setup-java`, `configure-aws-credentials`)도 v5로 올림.
+- 결과: 테스트 22개가 GitHub 러너에서 MySQL 서비스 컨테이너와 함께 통과(1분 16초).
+  Windows에서 만든 저장소를 리눅스에서 실행할 때 **줄바꿈(CRLF/LF)뿐 아니라 실행 권한도 확인해야 한다**는 것을 배움.
