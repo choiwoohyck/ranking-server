@@ -1,0 +1,101 @@
+# CI: 모든 push / PR에서 테스트
+# CD: main에 push되고 테스트가 통과하면 EC2에 자동 배포
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+
+# 같은 브랜치에서 새로 push하면 이전 실행을 취소 (배포가 겹치지 않게)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-southeast-2
+  SECURITY_GROUP_ID: sg-0908d6fa759ddde1c
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # 테스트 중 RankingServerApplicationTests가 실제 DB에 연결하므로 MySQL을 옆에 띄운다 (Compose와 비슷)
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: ranking
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest --silent"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Test
+        run: ./gradlew test --no-daemon
+        env:
+          DB_URL: jdbc:mysql://localhost:3306/ranking
+          DB_PASSWORD: test
+
+  deploy:
+    needs: test                                    # 테스트가 통과해야 실행
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # AWS에 "나는 이 저장소의 main 브랜치 워크플로우다"라는 OIDC 토큰을 받기 위해 필요
+      contents: read
+
+    steps:
+      # 장기 보관용 AWS 키 없이, OIDC로 IAM 역할을 잠깐(1시간 이내) 빌려 쓴다
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 평소 22번 포트는 개발자 IP에만 열려 있다 → 이 러너의 IP만 배포하는 동안 잠깐 연다
+      - name: Open SSH for this runner
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "RUNNER_IP=$RUNNER_IP" >> "$GITHUB_ENV"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$SECURITY_GROUP_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$RUNNER_IP/32,Description=github-actions-deploy}]"
+
+      - name: Deploy to EC2
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          install -m 600 /dev/null ~/deploy_key
+          echo "$SSH_KEY" > ~/deploy_key
+          SSH="ssh -i $HOME/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ubuntu@$EC2_HOST"
+
+          # 보안 그룹 규칙이 반영될 때까지 몇 초 걸릴 수 있어 재시도
+          for i in 1 2 3 4 5 6; do $SSH true && break; sleep 5; done
+
+          $SSH 'set -e
+            cd ~/ranking-server
+            git pull --ff-only
+            docker compose up --build -d
+            docker image prune -f
+            for i in $(seq 1 30); do curl -sf localhost:8080/ping && exit 0; sleep 5; done
+            echo "서버가 응답하지 않습니다"; docker compose logs --tail 50 app; exit 1'
+
+      # 성공하든 실패하든 반드시 다시 닫는다
+      - name: Close SSH for this runner
+        if: always() && env.RUNNER_IP != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$SECURITY_GROUP_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$RUNNER_IP/32}]"
