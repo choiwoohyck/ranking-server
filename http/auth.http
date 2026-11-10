@@ -1,0 +1,41 @@
+### 1. 회원가입 (성공 → 200)
+POST http://localhost:8080/auth/signup
+Content-Type: application/json
+
+{ "userId": "otter1", "password": "password123" }
+
+### 2. 로그인 (성공 → 200, 응답 본문에 token)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{ "userId": "otter1", "password": "password123" }
+
+### 3. 같은 아이디로 다시 가입 (실패해야 함)
+POST http://localhost:8080/auth/signup
+Content-Type: application/json
+
+{ "userId": "otter1", "password": "another123" }
+
+### 4. 비밀번호 틀림 (실패해야 함)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{ "userId": "otter1", "password": "wrong-password" }
+
+### 5. 없는 아이디 (실패해야 함, 4번과 같은 응답이어야 함)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{ "userId": "nobody", "password": "password123" }
+
+### 6. 빈 값 (검증 실패 → 400)
+POST http://localhost:8080/auth/signup
+Content-Type: application/json
+
+{ "userId": "", "password": "   " }
+
+### 7. 너무 짧은 비밀번호 (8자 미만 → 400)
+POST http://localhost:8080/auth/signup
+Content-Type: application/json
+
+{ "userId": "otter2", "password": "1" }
