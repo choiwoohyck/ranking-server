@@ -1,0 +1,31 @@
+# 서버 + MySQL을 한 번에 띄운다:  docker compose up --build
+# 비밀값은 같은 폴더의 .env에서 읽는다 (.env.example 참고)
+services:
+  mysql:                                   # 서비스 이름 = Compose 네트워크 안에서의 주소
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}  # .env의 값이 들어감
+      MYSQL_DATABASE: ranking              # 처음 뜰 때 ranking DB 생성
+    volumes:
+      - mysql-data:/var/lib/mysql          # DB 파일을 볼륨에 저장 → down 해도 데이터 유지
+    healthcheck:                           # "접속 받을 준비가 됐나?" 확인
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # ports를 열지 않음: 서버는 같은 네트워크 안에서 mysql:3306으로 접속하므로 내 PC에 열 필요가 없다
+
+  app:
+    build: .                               # 이 폴더의 Dockerfile로 이미지를 만들어 실행
+    ports:
+      - "8080:8080"                        # 내 PC 8080 → 컨테이너 8080
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ranking   # localhost가 아니라 서비스 이름 mysql
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy         # MySQL이 "켜짐"이 아니라 "준비됨"이 된 뒤에 시작
+
+volumes:
+  mysql-data:
